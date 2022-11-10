@@ -1,12 +1,16 @@
 """
-Tests for the pose_generators module
+pytest Tests for the pose_generators module
+
+To run the test, from the base of the repo run: python3 -m pytest test/test_pose_generators.py
 
 """
 
 ##
 # file: test_pose_generators.py
-# date: 2022-11-07
+# date: 2022-11-09
 # author: Channing Ko-Madden
+
+import math
 
 import pytest
 
@@ -39,33 +43,34 @@ class TestPoseGenerators:
     def test_create_polygon_pose(self):
         """
         Test the create_polygon_pose function.
-        Each side of the polygon should be the same correct length, and
-        the heading difference between each pose should be correct and the
-        same for each pose
+            Each side of the polygon should be the same correct length
+            The yaw difference between each pose should be correct and the same for each pose.
+            The last pose should be in the same x,y position as the start pose
         """
-        poses = pg.create_polygon_pose(4, 5.0)
-        assert(len(poses) == 4)
-        # check that the final pose has the same x,y position as the start
-        assert(poses[-1].position.x == pytest.approx(0.0))
-        assert(poses[-1].position.y == pytest.approx(0.0))
-        print(poses)
-
+        side_length_m = 5.0 
         start_pose = Pose()
-        start_pose.position.x = 5.0
-        start_pose.position.y = 2.5
+        start_pose.orientation.w = 1.0
 
-        poses = pg.create_polygon_pose(4, 5.0, start_pose)
-        assert(len(poses) == 4)
-        # check that the final pose has the same x,y position as the start
-        assert(poses[-1].position.x == pytest.approx(5.0))
-        assert(poses[-1].position.y == pytest.approx(2.5))
-        print(poses)
+        # test creating polygon of multiple sides
+        for i in range(3, 9):
+            poses = pg.create_polygon_pose(i, side_length_m, start_pose)
+            assert(len(poses) == i) # check there are the correct number of poses
+            # check that the final pose has the same x,y position as the start
+            assert(poses[-1].position.x == pytest.approx(start_pose.position.x))
+            assert(poses[-1].position.y == pytest.approx(start_pose.position.y))
 
+            rot_angle_rad = math.pi - pg.regular_polygon_interior_angle(i)
+            for i in range(0, len(poses) - 1):
+                # calculate the yaw change between orientations to confirm they are correct
+                inverse_q = poses[i].orientation
+                inverse_q.w *= -1 # negate for inverse quaternion
 
-def print_pose_list():
-        poses = pg.create_polygon_pose(4, 5.0)
-        print(poses)
+                rot_quat = pg.quaternion_multiply(poses[i+1].orientation, inverse_q)
+                rot_euler = pg.euler_from_quaterion(rot_quat)
+                # assert the magnitude of rotation (regardless of direction) between poses is correct
+                assert(abs(rot_euler.z) == pytest.approx(rot_angle_rad)) 
 
-
-if __name__ == "__main__":
-    print_pose_list()
+                # calculate the euclidian distance between poses to ensure they are the correct size
+                length = math.sqrt(math.pow(poses[i].position.x - poses[i+1].position.x, 2)
+                    + math.pow(poses[i].position.y - poses[i+1].position.y, 2))
+                assert(length == pytest.approx(side_length_m))
